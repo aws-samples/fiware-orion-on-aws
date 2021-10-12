@@ -1,0 +1,16 @@
+# General files
+node_modules
+.DS_Store
+*.js
+!jest.config.js
+*.d.ts
+
+# CDK asset staging directory
+.cdk.staging
+cdk.out
+cdk.context.json
+cdk-outputs.json
+waf.json
+# Auto-generated docker compose files
+docker/**/docker-compose.yml
+

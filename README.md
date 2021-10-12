@@ -1,17 +1,193 @@
-## My Project
+# FIWARE: Orion and Cygnus on AWS
 
-TODO: Fill this README out!
+This guide will help you to deploy Fiware's Orion and Cygnus components into a serverless architecture.
 
-Be sure to:
+## What does this repository include?
 
-* Change the title in this README
-* Edit your repository description on GitHub
+1. An [AWS CDK](https://aws.amazon.com/cdk/) project in charge of provisioning the basic infrastructure with a VPC Network, Security Groups and two managed Databases, one Amazon Aurora Serverless (PostgreSql) and one Amazon DocumentDB. These are represented in the following stacks:
+
+- Network Stack
+- DocumentDB Stack
+- Aurora Stack
+
+2. A docker-compose generator to provisioning AWS ECS Fargate instances, ALBs with Firewall WAF rules. This is a nodeJS script that runs after the CDK and it will automatically generate two docker-compose one for each service.
+
+## Architecture
+
+- First, this architechture is deployed with AWS CDK as follows.
+
+![CDK Architecture](image/cdk-arch1.png)
+
+- Finally, the architecture is deployed with Docker Compose CLI as follows.
+
+![Docker Compose Architecture](image/ecs-arch1.png)
+
+## How to use it?
+
+### 1. Infrastructure
+
+Deploy Infrastructure. Firstly, creating an [AWS profile](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-profiles.html) is recommended if you do not have it.
+
+### 2. Configuring WAF for ALB
+
+Security is very important and we strongly recommend that you protect your services endpoints with AWS WAF. You can add WAF for both Orion and Cygnus ALBs. You can use the included [waf.json.sample](./waf.json.sample) file that shows the setting for `denylist` and `allowlist`.
+`denylist` is used for [IPSetReferenceStatement](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-properties-wafv2-webacl-ipsetreferencestatement.html), `allowlist` is used fot [Rate-based rule statement](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-properties-wafv2-webacl-ratebasedstatement.html)
+
+You should start by copying the sample file, then you edit your settings in your own waf.json
+
+```bash
+cp waf.json.sample waf.json
+
+```
+
+If you skip this, your endpoints will be public and this message will be showed while deploying:
+
+```bash
+[WARN] WAF Allow list is empty, this makes the service to be public
+
+```
+
+### 3. Deployer script
+
+The basic infrastructure and the docker-compose generator are executed by this bash script:
+
+`$./deployer.sh <AWS_PROFILE>`
+
+After the deployment is completed, you can see these services running in you AWS account.
+
+| AWS Service                     | Description                                 |
+| ------------------------------- | ------------------------------------------- |
+| AWS Fargate                     | Containers for Orion and Cygnus             |
+| Application Load Balancer (ALB) | Load Balancer for Orion and Cygnus web api. |
+| Amazon DocumentDB               | Database for Orion                          |
+| Amazon Aurora Serverless        | Database for Cygnus                         |
+| AWS WAF                         | Web Application Firewall for the ALB. \*    |
+
+**NOTE**: WAF rules for the ALBs can be changed, please see this [reference](https://docs.aws.amazon.com/waf/latest/developerguide/aws-managed-rule-groups-list.html).
+
+### 4. Start Orion and Cygnus services
+
+#### 4.1 Prerequisites
+
+1. Install [docker](https://docs.docker.com/cloud/ecs-integration/).
+2. Create docker context for FIWARE environment. if you already have a context for orion and cygnus, you can just use it.
+
+```bash
+docker context create ecs <context-name>
+? Create a Docker context using: [Use arrows to move, type to filter]
+  > An existing AWS profile  <- You can use the profile you created here.
+docker context use <context-name>
+
+```
+
+#### 4.2 Deploy FIWARE Orion
+
+`docker compose -p orion -f docker/orion/docker-compose.yml up`
+
+#### 4.3 Deploy FIWARE Cygnus
+
+`docker compose -p cygnus -f docker/cygnus/docker-compose.yml up`
+
+## Testing
+
+[Loadtest for FIWARE Components](https://github.com/FIWARE/load-tests) provides laodtest for FIWARE.
+
+## Clean up
+
+If you need to clean up the resources, please follow steps below.
+
+### Delete the FIWARE services
+
+Orion: `docker compose -p orion down`
+
+Cygnus: `docker compose -p cygnus down`
+
+### Deprovision Infrastructure
+
+**[WARN] All data will be deleted by this step.**
+
+`cdk destroy --all --profile <AWS_PROFILE>`
+
+## Additional Topics
+
+### MongoDB as context database for Orion
+
+If you have a MongoDB cluster, like [Atlas](https://www.mongodb.com/cloud/atlas), you can edit the [docker-compose](./docker/orion/docker-compose.yml.sample) file for orion with these options:
+
+- dbhost
+- rplSet
+- dbuser
+- dbpwd
+
+```yaml
+command: ...
+  /usr/bin/contextBroker -fg -multiservice -ngsiv1Autocast -disableFileLog -dbhost <MontoDB Atlas cluster's endpoint array including 27017 port> -rplSet <MontoDB Atlas replica set shard name> -dbuser <MontoDB Atlas user> -dbpwd <MongoDB Atlas password> -dbDisableRetryWrites -logLevel $${ORION_LOGS_LEVEL}
+```
+
+Replace parameter values for Orion below with ones MongoDB Atlas provided.
+
+### Useful docker compose cli command
+
+#### logs
+
+To get the application logs.
+
+```bash
+docker compose --project-name <project name> logs
+```
+
+#### ps
+
+To get service information deployed on ECS.
+
+```bash
+docker compose --project-name <project name> ps
+
+#Example
+NAME                                          SERVICE             STATUS              PORTS
+task/orion/a6033a645faa4cd89c474ba950188ff5   orion               Running             orion-alb-XXXXXXXXXX.us-east-1.elb.amazonaws.com:1026->1026/http
+task/orion/d869b3ca63b241c0801c46488d3791ba   orion               Running             orion-alb-XXXXXXXXXX.us-east-1.elb.amazonaws.com:1026->1026/http
+
+```
+
+#### convert
+
+To transform docker-compose.yml into a CloudFormation template.
+
+```bash
+docker compose --project-name <project name> convert
+
+#Example
+AWSTemplateFormatVersion: 2010-09-09
+Resources:
+  CloudMap:
+    Properties:
+      Description: Service Map for Docker Compose project ecs-text
+      Name: ecs-text.local
+      Vpc: vpc-cd1d32b6
+    Type: AWS::ServiceDiscovery::PrivateDnsNamespace
+  Cluster:
+    Properties:
+      ClusterName: ecs-text
+      Tags:
+        - Key: com.docker.compose.project
+          Value: ecs-text
+    Type: AWS::ECS::Cluster
+...
+
+```
+
+## Known Issues
+
+### DocumentDB vs MongoDB
+
+- [Issue in FIWARE github repository](https://github.com/telefonicaid/fiware-orion/issues/3778)
+- DocumentDB does not port all the functions of MongoDB, like for example geospatial capabilities.
+
+## License
+
+This project is licensed under the GPL v3 License. See the [LICENSE](LICENSE) file.This library is licensed under the GPL v3 and the MIT-0 License. See the [LICENSE.MIT-0](LICENSE.MIT-0) file.
 
 ## Security
 
 See [CONTRIBUTING](CONTRIBUTING.md#security-issue-notifications) for more information.
-
-## License
-
-This library is licensed under the MIT-0 License. See the LICENSE file.
-
