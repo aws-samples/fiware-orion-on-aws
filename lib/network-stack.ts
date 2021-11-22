@@ -1,106 +1,138 @@
-import * as cdk from '@aws-cdk/core';
-import * as ec2 from '@aws-cdk/aws-ec2';
-import { Port, SecurityGroup, SubnetType } from '@aws-cdk/aws-ec2';
+import * as cdk from "@aws-cdk/core";
+import * as ec2 from "@aws-cdk/aws-ec2";
+import * as logs from "@aws-cdk/aws-logs";
 
 export class NetworkStack extends cdk.Stack {
-  public readonly dbVpc: ec2.Vpc;
+  public readonly vpc: ec2.Vpc;
   public readonly ddbSg: ec2.SecurityGroup;
   public readonly auroraSg: ec2.SecurityGroup;
 
   constructor(scope: cdk.Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
-    const vpc = new ec2.Vpc(this, 'VPC for Orion and Cygnus', {
-      cidr: '10.0.0.0/16',
+    const cwLogs = new logs.LogGroup(this, "orion-vpc-logs", {
+      logGroupName: "/aws/vpc/flowlogs",
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+    });
+
+    const vpc = new ec2.Vpc(this, "VPC for Orion and Cygnus", {
+      cidr: "10.0.0.0/16",
       subnetConfiguration: [
         {
           cidrMask: 24,
-          name: 'public-subnet',
+          name: "orion-public-subnet",
           subnetType: ec2.SubnetType.PUBLIC,
         },
-        { cidrMask: 24,
-          name: 'db-subnet',
-          subnetType: ec2.SubnetType.PRIVATE
+        {
+          cidrMask: 24,
+          name: "orion-private-subnet",
+          subnetType: ec2.SubnetType.PRIVATE_WITH_NAT,
         },
       ],
       maxAzs: 4,
+      flowLogs: {
+        s3: {
+          destination: ec2.FlowLogDestination.toCloudWatchLogs(cwLogs),
+          trafficType: ec2.FlowLogTrafficType.ALL,
+        },
+      },
     });
 
+    // Cygnus security group
+    const cygnusSG = new ec2.SecurityGroup(this, "SG for Cygnus", {
+      vpc,
+      description: "Fiware-Cygnus internal services",
+    });
+
+    // Orion security group
+    const orionSG = new ec2.SecurityGroup(this, "SG for Orion", {
+      vpc,
+      description: "Fiware-Orion internal services",
+    });
+
+    // Documentdb security group
+    const ddbSG = new ec2.SecurityGroup(this, "SG for DDB", {
+      vpc,
+      description: "Fiware-Orion allow connection to DDB",
+    });
+
+    // Aurora security group
+    const auroraSG = new ec2.SecurityGroup(this, "SG for Aurora", {
+      vpc,
+      description: "Fiware-Cygnus allow connection to Aurora psql",
+    });
+
+    // ALB Orion security group
+    const albForOrionSG = new ec2.SecurityGroup(this, "SG for Orion-ALB", {
+      vpc,
+      description: "Fiware-Orion allow internet access to API",
+    });
+
+    // ALB Cygnus security group
+    const albForCygnusSG = new ec2.SecurityGroup(this, "SG for Cygnus-ALB", {
+      vpc,
+      description: "Fiware-Cygnus allow internet access to managment API",
+    });
+
+    const publicSubnetsIds = new Array();
+    vpc.publicSubnets.forEach((subnet) => {
+      publicSubnetsIds.push(subnet.subnetId);
+    });
+
+    const privateSubnetsIds = new Array();
+    vpc.privateSubnets.forEach((subnet) => {
+      privateSubnetsIds.push(subnet.subnetId);
+    });
+
+    // Orion rules: Allow Cygnus http service, ALB
+    orionSG.addIngressRule(albForOrionSG, ec2.Port.tcp(1026));
+
+    // Documentdb rules: Allow Orion
+    ddbSG.addIngressRule(orionSG, ec2.Port.tcp(27017));
+
+    // Aurora rules: Allow cygnus
+    auroraSG.addIngressRule(cygnusSG, ec2.Port.tcp(5432));
+
+    // Cygnus rules: Allow orion to cygnus synk, ALB and egress to reach Orion API
+    cygnusSG.addIngressRule(orionSG, ec2.Port.tcp(5055));
+    cygnusSG.addIngressRule(albForCygnusSG, ec2.Port.tcp(5055));
+    cygnusSG.addIngressRule(albForCygnusSG, ec2.Port.tcp(5080));
+
+    // ALB Orion and Cynus
+    albForOrionSG.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(1026));
+    albForCygnusSG.addIngressRule(orionSG, ec2.Port.tcp(5055));
+
+    // Expose security groups and vpc
+    this.vpc = vpc;
+    this.ddbSg = ddbSG;
+    this.auroraSg = auroraSG;
+
+    // Outputs
     new cdk.CfnOutput(this, "OrionVPCId", {
       value: `${vpc.vpcId}`,
     });
 
-    const subnetsIds = new Array;
-    vpc.publicSubnets.forEach((subnet, idx) => {
-      subnetsIds.push(subnet.subnetId);  
-    });
     new cdk.CfnOutput(this, `OrionPublicSubnetsIds`, {
-      value: subnetsIds.join(),
+      value: publicSubnetsIds.join(),
     });
-    
-    this.dbVpc = vpc;
 
-    // Create orion-alb security group
-    const albForOrionSG = new SecurityGroup(this, 'SG for Orion-ALB', {
-      vpc: vpc,
-      securityGroupName: 'SG for Orion-ALB',
+    new cdk.CfnOutput(this, `OrionPrivateSubnetsIds`, {
+      value: privateSubnetsIds.join(),
     });
-    albForOrionSG.addIngressRule(
-      ec2.Peer.anyIpv4(),
-      ec2.Port.tcpRange(1026, 1030)
-    );
 
     new cdk.CfnOutput(this, "SG-Orion-ALB", {
       value: `${albForOrionSG.securityGroupId}`,
     });
 
-    // Create cygnus-alb security group
-    const albForCygnusSG = new SecurityGroup(this, 'SG for Cygnus-ALB', {
-      vpc: vpc,
-      securityGroupName: 'SG for Cygnus-ALB',
+    new cdk.CfnOutput(this, "SG-Cygnus", {
+      value: `${cygnusSG.securityGroupId}`,
     });
-    albForCygnusSG.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(5080));
-
-    new cdk.CfnOutput(this, "SG-Cynus-ALB", {
-      value: `${albForCygnusSG.securityGroupId}`,
-    });
-
-    // Create orion security group
-    const orionSG = new SecurityGroup(this, 'SG for Orion', {
-      vpc: vpc,
-      securityGroupName: 'SG for Orion',
-    });
-    orionSG.addIngressRule(albForOrionSG, ec2.Port.tcpRange(1026, 1030));
 
     new cdk.CfnOutput(this, "SG-Orion", {
       value: `${orionSG.securityGroupId}`,
     });
 
-    // Create cygnus security group
-    const cygnusSG = new SecurityGroup(this, 'SG for Cygnus', {
-      vpc: vpc,
-      securityGroupName: 'SG for Cygnus',
+    new cdk.CfnOutput(this, "SG-Cynus-ALB", {
+      value: `${albForCygnusSG.securityGroupId}`,
     });
-    cygnusSG.addIngressRule(albForCygnusSG, ec2.Port.tcp(5080));
-    cygnusSG.addIngressRule(orionSG, ec2.Port.tcp(5055));
-
-    new cdk.CfnOutput(this, "SG-Cygnus", {
-      value: `${cygnusSG.securityGroupId}`,
-    });
-
-    // Create ddb security group
-    const ddbSG = new SecurityGroup(this, 'SG for DDB', {
-      vpc: vpc,
-      securityGroupName: 'SG for DDB',
-    });
-    ddbSG.addIngressRule(orionSG, ec2.Port.tcp(27017));
-    this.ddbSg = ddbSG;
-
-    // Create aurora security group
-    const auroraSG = new SecurityGroup(this, 'SG for Aurora', {
-      vpc: vpc,
-      securityGroupName: 'SG for Aurora',
-    });
-    auroraSG.addIngressRule(cygnusSG, ec2.Port.tcp(5432));
-    this.auroraSg = auroraSG;
   }
 }

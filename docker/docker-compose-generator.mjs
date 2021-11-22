@@ -41,38 +41,19 @@ function hasWafDenyItems(waf) {
 function configureAllowWaf(map, waf) {
   const resources = map["x-aws-cloudformation"].Resources;
   if (hasWafAllowItems(waf)) {
-    if (Array.isArray(resources.WebACL.DependsOn)) {
-      resources.WebACL.DependsOn.push("IPAllowList");
-    } else {
-      resources.WebACL.DependsOn = ["IPAllowList"];
-    }
     resources.IPAllowList.Properties.Addresses = waf.ipRatebased.allowList;
   } else {
-    delete resources.IPAllowList;
-    resources.WebACL.Properties.Rules.forEach((r, i) => {
-      if (r.Name === "Custom-Ratebased") {
-        resources.WebACL.Properties.Rules.splice(i, 1);
-      }
-    });
+    resources.WebACL.Properties.DefaultAction = { Allow: {} };
+    resources.IPAllowList.Properties.Addresses = ["0.0.0.0/32"];
   }
 }
 
 function configureDenyWaf(map, waf) {
   const resources = map["x-aws-cloudformation"].Resources;
   if (hasWafDenyItems(waf)) {
-    if (Array.isArray(resources.WebACL.DependsOn)) {
-      resources.WebACL.DependsOn.push("IPDenyList");
-    } else {
-      resources.WebACL.DependsOn = ["IPDenyList"];
-    }
     resources.IPDenyList.Properties.Addresses = waf.ipRestriction.denyList;
   } else {
-    delete resources.IPDenyList;
-    resources.WebACL.Properties.Rules.forEach((r, i) => {
-      if (r.Name === "Custom-IPaddress-DenyList") {
-        resources.WebACL.Properties.Rules.splice(i, 1);
-      }
-    });
+    resources.IPDenyList.Properties.Addresses = ["0.0.0.0/32"];
   }
 }
 
@@ -85,9 +66,7 @@ try {
   const cygnus = parseYML(cygnusSample);
 
   configureDenyWaf(orion, waf);
-  configureDenyWaf(cygnus, waf);
   configureAllowWaf(orion, waf);
-  configureAllowWaf(cygnus, waf);
 
   // Map vars for orion
   orion["x-aws-vpc"] = cdk.Network.OrionVPCId;
@@ -95,10 +74,7 @@ try {
   orion["x-aws-cloudformation"].Resources.LoadBalancer.Properties.SecurityGroups = [cdk.Network.SGOrionALB];
   orion["x-aws-cloudformation"].Resources.LoadBalancer.Properties.Subnets = cdk.Network.OrionPublicSubnetsIds.split(",");
   orion.networks["orion-sg"].name = cdk.Network.SGOrion;
-  orion.services.orion.environment = {};
   orion.services.orion.environment.DOCDB_ENDPOINT = cdk.DocumentdbStack.Docdbendpoint;
-  orion.services.orion.environment.DOCDB_USER = "awsdemo";
-  orion.services.orion.environment.DOCDB_LOGS_LEVEL = "DEBUG";
   orion.secrets.docdb_password.name = cdk.DocumentdbStack.DocdbsecretArn;
 
   outputYml("./docker/orion/docker-compose.yml", orion);
@@ -109,9 +85,10 @@ try {
 
   cygnus.services.cygnus.environment[0] = `CYGNUS_POSTGRESQL_HOST=${cdk.AuroraStack.AuroraEndpoint}`;
 
+  cygnus["x-aws-cloudformation"].Resources.CygnusTCP5055TargetGroup.Properties.VpcId = cdk.Network.OrionVPCId;
   cygnus["x-aws-cloudformation"].Resources.CygnusTCP5080TargetGroup.Properties.VpcId = cdk.Network.OrionVPCId;
   cygnus["x-aws-cloudformation"].Resources.LoadBalancer.Properties.SecurityGroups = [cdk.Network.SGCynusALB];
-  cygnus["x-aws-cloudformation"].Resources.LoadBalancer.Properties.Subnets = cdk.Network.OrionPublicSubnetsIds.split(",");
+  cygnus["x-aws-cloudformation"].Resources.LoadBalancer.Properties.Subnets = cdk.Network.OrionPrivateSubnetsIds.split(",");
   cygnus.networks["cygnus-sg"].name = cdk.Network.SGCygnus;
 
   outputYml("./docker/cygnus/docker-compose.yml", cygnus);
