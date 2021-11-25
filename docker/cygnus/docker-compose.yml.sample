@@ -23,6 +23,7 @@ services:
           cpus: '2'
           memory: 2048M
     ports:
+      - '5055:5055'
       - '5080:5080'
     environment:
       - 'CYGNUS_POSTGRESQL_HOST=<Your-aurora-endpoint>'
@@ -31,11 +32,21 @@ services:
       - 'CYGNUS_POSTGRESQL_PASS_FILE=/run/secrets/postgres_password'
       - 'CYGNUS_POSTGRESQL_ENABLE_CACHE=true'
       - 'CYGNUS_POSTGRESQL_SERVICE_PORT=5055'
-      - 'CYGNUS_LOG_LEVEL=DEBUG'
+      - 'CYGNUS_LOG_LEVEL=WARN'
       - 'CYGNUS_API_PORT=5080'
       - 'CYGNUS_SERVICE_PORT=5055'
 x-aws-cloudformation:
   Resources:
+    CygnusTCP5055TargetGroup:
+      Type: AWS::ElasticLoadBalancingV2::TargetGroup
+      Properties:
+        HealthCheckPath: /v1/version
+        HealthCheckPort: 5080
+        HealthCheckProtocol: HTTP
+        Protocol: HTTP
+        Port: 5055
+        VpcId: <Your VPC-ID>
+        TargetType: ip
     CygnusTCP5080TargetGroup:
       Type: AWS::ElasticLoadBalancingV2::TargetGroup
       Properties:
@@ -46,7 +57,6 @@ x-aws-cloudformation:
         Port: 5080
         VpcId: <Your VPC-ID>
         TargetType: ip
-
     LoadBalancer:
       Type: AWS::ElasticLoadBalancingV2::LoadBalancer
       Properties:
@@ -55,14 +65,24 @@ x-aws-cloudformation:
         LoadBalancerAttributes:
           - Key: routing.http2.enabled
             Value: true
-        Scheme: internet-facing
+        Scheme: internal
         SecurityGroups:
           - <Cygnus-ALB Security Group ID>
         Subnets:
-          - <Public Subnet1 ID>
-          - <Public Subnet2 ID>
+          - <Private Subnet1 ID>
+          - <Private Subnet2 ID>
         Type: application
-
+    CygnusTCP5055Listener:
+      Type: AWS::ElasticLoadBalancingV2::Listener
+      Properties:
+        LoadBalancerArn:
+          Ref: LoadBalancer
+        Port: 5055
+        Protocol: HTTP
+        DefaultActions:
+          - TargetGroupArn:
+              Ref: CygnusTCP5055TargetGroup
+            Type: forward
     CygnusTCP5080Listener:
       Type: AWS::ElasticLoadBalancingV2::Listener
       Properties:
@@ -74,108 +94,6 @@ x-aws-cloudformation:
           - TargetGroupArn:
               Ref: CygnusTCP5080TargetGroup
             Type: forward
-    WebACL:
-      Type: AWS::WAFv2::WebACL
-      Properties:
-        Name: cygnus-waf
-        DefaultAction:
-          Allow: {}
-        Scope: REGIONAL
-        VisibilityConfig:
-          CloudWatchMetricsEnabled: true
-          MetricName: cygnus-waf
-          SampledRequestsEnabled: false
-        Rules:
-          - Name: AWS-AWSManagedRulesAmazonIpReputationList
-            Priority: 0
-            Statement:
-              ManagedRuleGroupStatement:
-                VendorName: AWS
-                Name: AWSManagedRulesAmazonIpReputationList
-            OverrideAction:
-              Count: {}
-            VisibilityConfig:
-              CloudWatchMetricsEnabled: true
-              MetricName: AWSManagedRulesAmazonIpReputationList
-              SampledRequestsEnabled: false
-          - Name: "AWSManagedRulesKnownBadInputsRule"
-            Priority: 1
-            Statement:
-              ManagedRuleGroupStatement:
-                VendorName: "AWS"
-                Name: "AWSManagedRulesKnownBadInputsRuleSet"
-            OverrideAction:
-              None: {}
-            VisibilityConfig:
-              CloudWatchMetricsEnabled: true
-              MetricName: "AWSManagedRulesKnownBadInputsRule"
-              SampledRequestsEnabled: true
-          - Name: "AWSManagedRulesAmazonIpReputation"
-            Priority: 2
-            Statement:
-              ManagedRuleGroupStatement:
-                VendorName: "AWS"
-                Name: "AWSManagedRulesAmazonIpReputationList"
-            OverrideAction:
-              None: {}
-            VisibilityConfig:
-              CloudWatchMetricsEnabled: true
-              MetricName: "AWSManagedRulesAmazonIpReputation"
-              SampledRequestsEnabled: true
-          - Name: Custom-IPaddress-DenyList
-            Priority: 3
-            Action: 
-              Count: {}          
-            Statement:
-              IPSetReferenceStatement:
-                Arn:
-                  Fn::GetAtt: IPDenyList.Arn
-            VisibilityConfig:
-              CloudWatchMetricsEnabled: true
-              MetricName: Custom-IPaddress-DenyList
-              SampledRequestsEnabled: false
-          - Name: Custom-Ratebased
-            Priority: 4
-            Action: 
-              Count: {}            
-            Statement:
-              RateBasedStatement:
-                AggregateKeyType: IP
-                Limit: 100
-                ScopeDownStatement:
-                  NotStatement:
-                    Statement:
-                      IPSetReferenceStatement:
-                        Arn:
-                          Fn::GetAtt: IPAllowList.Arn
-            VisibilityConfig:
-              CloudWatchMetricsEnabled: true
-              MetricName: Custom-Ratebased
-              SampledRequestsEnabled: false
-    IPAllowList:
-      Type: "AWS::WAFv2::IPSet"
-      Properties:
-        Name: Custom-ipaddress-allowlist
-        Scope: REGIONAL
-        IPAddressVersion: IPV4
-        Addresses:
-          - <ip allwo list>
-    IPDenyList:
-      Type: "AWS::WAFv2::IPSet"
-      Properties:
-        Name: Custom-ipaddress-blacklist
-        Scope: REGIONAL
-        IPAddressVersion: IPV4
-        Addresses:
-          - <ip deny list>
-    WebACLAssociation:
-      Type: 'AWS::WAFv2::WebACLAssociation'
-      DependsOn: [LoadBalancer, WebACL]
-      Properties:
-        WebACLArn:
-          Fn::GetAtt: WebACL.Arn
-        ResourceArn:
-          Ref: LoadBalancer
 networks:
   cygnus-sg:
     external: true

@@ -26,9 +26,10 @@ services:
     ports:
       - "1026:1026"
     entrypoint: ["/bin/sh", "-c"]
-    environment: DOCDB_ENDPOINT=<Your-docdb-endpoint>
-      DOCDB_USER=awsdemo
-      ORION_LOGS_LEVEL=ERROR
+    environment:
+      DOCDB_ENDPOINT: <Your-docdb-endpoint>
+      DOCDB_USER: awsdemo
+      ORION_LOGS_LEVEL: WARN
     command:
       - |
         sleep 5
@@ -81,7 +82,7 @@ x-aws-cloudformation:
       Properties:
         Name: orion-waf
         DefaultAction:
-          Allow: {}
+          Block: {}
         Scope: REGIONAL
         VisibilityConfig:
           CloudWatchMetricsEnabled: true
@@ -126,8 +127,8 @@ x-aws-cloudformation:
               SampledRequestsEnabled: true
           - Name: Custom-IPaddress-DenyList
             Priority: 3
-            Action: 
-              Count: {}          
+            Action:
+              Block: {}
             Statement:
               IPSetReferenceStatement:
                 Arn:
@@ -135,11 +136,23 @@ x-aws-cloudformation:
             VisibilityConfig:
               CloudWatchMetricsEnabled: true
               MetricName: Custom-IPaddress-DenyList
-              SampledRequestsEnabled: false
-          - Name: Custom-Ratebased
+              SampledRequestsEnabled: true
+          - Name: Custom-IPaddress-AllowList
             Priority: 4
-            Action: 
-              Count: {}            
+            Action:
+              Allow: {}
+            Statement:
+              IPSetReferenceStatement:
+                Arn:
+                  Fn::GetAtt: IPAllowList.Arn
+            VisibilityConfig:
+              CloudWatchMetricsEnabled: true
+              MetricName: Custom-IPaddress-AllowList
+              SampledRequestsEnabled: true
+          - Name: Custom-Ratebased
+            Priority: 5
+            Action:
+              Count: {}
             Statement:
               RateBasedStatement:
                 AggregateKeyType: IP
@@ -153,11 +166,14 @@ x-aws-cloudformation:
             VisibilityConfig:
               CloudWatchMetricsEnabled: true
               MetricName: Custom-Ratebased
-              SampledRequestsEnabled: false
+              SampledRequestsEnabled: true
+      DependsOn:
+        - IPDenyList
+        - IPAllowList
     IPAllowList:
       Type: "AWS::WAFv2::IPSet"
       Properties:
-        Name: Custom-ipaddress-allowlist
+        Name: Custom-orion-ipaddress-allowlist
         Scope: REGIONAL
         IPAddressVersion: IPV4
         Addresses:
@@ -165,7 +181,7 @@ x-aws-cloudformation:
     IPDenyList:
       Type: "AWS::WAFv2::IPSet"
       Properties:
-        Name: Custom-ipaddress-denylist
+        Name: Custom-orion-ipaddress-denylist
         Scope: REGIONAL
         IPAddressVersion: IPV4
         Addresses:

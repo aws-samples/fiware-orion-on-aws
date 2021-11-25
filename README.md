@@ -30,8 +30,9 @@ Deploy Infrastructure. Firstly, creating an [AWS profile](https://docs.aws.amazo
 
 ### 2. Configuring WAF for ALB
 
-Security is very important and we strongly recommend that you protect your services endpoints with AWS WAF. You can add WAF for both Orion and Cygnus ALBs. You can use the included [waf.json.sample](./waf.json.sample) file that shows the setting for `denylist` and `allowlist`.
-`denylist` is used for [IPSetReferenceStatement](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-properties-wafv2-webacl-ipsetreferencestatement.html), `allowlist` is used fot [Rate-based rule statement](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-properties-wafv2-webacl-ratebasedstatement.html)
+Security is very important and out of the box, the service is blocking all connections to the service. You need to add your public IP to AWS WAF for the Orion service ALB (Application Load Balancer). You can use the included [waf.json.sample](./waf.json.sample) file that shows how to configure `denylist` and `allowlist`.
+
+The deploy script will generated a docker-compose file that includes CloudFormation entries with [IPSetReferenceStatement](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-properties-wafv2-webacl-ipsetreferencestatement.html), and [Rate-based rule statement](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-properties-wafv2-webacl-ratebasedstatement.html) under the `WebACL` resource in the `x-aws-cloudformation` property for the firewall configuration.
 
 You should start by copying the sample file, then you edit your settings in your own waf.json
 
@@ -40,12 +41,14 @@ cp waf.json.sample waf.json
 
 ```
 
-If you skip this, your endpoints will be public and this message will be showed while deploying:
+If your `allowlist` is an empty array `[]`, your endpoint will be `public` and this message will be showed while deploying:
 
 ```bash
 [WARN] WAF Allow list is empty, this makes the service to be public
 
 ```
+
+You can edit the `waf.json` file anytime, but you will have to run the `docker compose` command again to update the service as needed.
 
 ### 3. Deployer script
 
@@ -106,7 +109,7 @@ Cygnus: `docker compose -p cygnus down`
 
 **[WARN] All data will be deleted by this step.**
 
-`cdk destroy --all --profile <AWS_PROFILE>`
+`npm run cdk destroy -- --all --profile <AWS_PROFILE>`
 
 ## Additional Topics
 
@@ -177,6 +180,10 @@ Resources:
 
 ```
 
+## Testing
+
+Follow the demo from the published blog: [How to build smart cities with FIWARE Orion Context Broker and Cygnus on AWS](https://aws.amazon.com/blogs/publicsector/how-to-build-smart-cities-with-fiware-orion-context-broker-and-cygnus-on-aws/)
+
 ## Known Issues
 
 ### DocumentDB vs MongoDB
@@ -187,7 +194,3 @@ Resources:
 ## License
 
 This project is licensed under the GPL v3 License. See the [LICENSE](LICENSE) file.This library is licensed under the GPL v3 and the MIT-0 License. See the [LICENSE.MIT-0](LICENSE.MIT-0) file.
-
-## Security
-
-See [CONTRIBUTING](CONTRIBUTING.md#security-issue-notifications) for more information.

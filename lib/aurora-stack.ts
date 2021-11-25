@@ -12,7 +12,7 @@ export class AuroraStack extends cdk.Stack {
   constructor(scope: cdk.Construct, id: string, props: AuroraStackProps) {
     super(scope, id, props);
 
-    const auroraPassSecret = new Secret(this, "AuroraPassword Password", {
+    const auroraPassSecret = new Secret(this, "Aurora Password", {
       secretName: "auroraPassword",
       generateSecretString: {
         excludePunctuation: true,
@@ -28,14 +28,11 @@ export class AuroraStack extends cdk.Stack {
       },
       vpc: props.auroraVpc,
       vpcSubnets: props.auroraVpc.selectSubnets({
-        subnetGroupName: "db-subnet",
+        subnetGroupName: "orion-private-subnet",
       }),
       securityGroups: [props.auroraSg],
-      parameterGroup: rds.ParameterGroup.fromParameterGroupName(
-        this,
-        "CygnusdbParameterGroup",
-        "default.aurora-postgresql10"
-      ),
+      enableDataApi: true,
+      parameterGroup: rds.ParameterGroup.fromParameterGroupName(this, "CygnusdbParameterGroup", "default.aurora-postgresql10"),
     });
 
     new cdk.CfnOutput(this, "Aurora-Endpoint", {
