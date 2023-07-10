@@ -10,7 +10,7 @@ else
 fi
 
 INSTALL="npm i"
-BOOTSTRAP="npm run cdk bootstrap"
+BOOTSTRAP="npm run cdk bootstrap -- --profile ${PROFILE}"
 PROVISION="npm run cdk deploy -- --profile ${PROFILE} --all --outputs-file ./cdk-outputs.json --require-approval never"
 DOCKER_GENERATOR="node --experimental-json-modules docker/docker-compose-generator.mjs"
 

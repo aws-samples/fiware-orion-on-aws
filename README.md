@@ -6,9 +6,9 @@ This guide will help you to deploy Fiware's Orion and Cygnus components into a s
 
 1. An [AWS CDK](https://aws.amazon.com/cdk/) project in charge of provisioning the basic infrastructure with a VPC Network, Security Groups and two managed Databases, one Amazon Aurora Serverless (PostgreSql) and one Amazon DocumentDB. These are represented in the following stacks:
 
-- Network Stack
-- DocumentDB Stack
-- Aurora Stack
+    - Network Stack
+    - DocumentDB Stack
+    - Aurora Stack
 
 2. A docker-compose generator to provisioning AWS ECS Fargate instances, ALBs with Firewall WAF rules. This is a nodeJS script that runs after the CDK and it will automatically generate two docker-compose one for each service.
 
@@ -52,6 +52,12 @@ You can edit the `waf.json` file anytime, but you will have to run the `docker c
 
 ### 3. Deployer script
 
+#### 3.1 Prerequisites
+
+Instal node v18.16.1 or greater.
+
+#### 3.2 Provisioning
+
 The basic infrastructure and the docker-compose generator are executed by this bash script:
 
 `$./deployer.sh <AWS_PROFILE>`
@@ -73,47 +79,69 @@ After the deployment is completed, you can see these services running in you AWS
 #### 4.1 Prerequisites
 
 1. Install [docker](https://docs.docker.com/cloud/ecs-integration/).
-2. Create docker context for FIWARE environment. if you already have a context for orion and cygnus, you can just use it.
+2. Create or select a docker context for the FIWARE orion environment.
 
 ```bash
-docker context create ecs <context-name>
+$ docker context create ecs <context-name>
 ? Create a Docker context using: [Use arrows to move, type to filter]
-  > An existing AWS profile  <- You can use the profile you created here.
-docker context use <context-name>
+  > An existing AWS profile  <- Note: Select this to use the AWS profile you created.
 
+$ docker context use <context-name>
 ```
 
-#### 4.2 Deploy FIWARE Orion
+#### 4.2 Deploy FIWARE Orion and Cygnus using Docker ECS integration
 
-`docker compose -p orion -f docker/orion/docker-compose.yml up`
+These docker files are build using the [Docker ECS integration](https://docs.docker.com/cloud/ecs-integration/), please check the link for more information.
 
-#### 4.3 Deploy FIWARE Cygnus
+To deploy, please run:
 
-`docker compose -p cygnus -f docker/cygnus/docker-compose.yml up`
+1. Orion: `docker compose -p orion -f docker/orion/docker-compose.yml up`
 
-## Testing
+2. Cygnus: `docker compose -p cygnus -f docker/cygnus/docker-compose.yml up`
 
-[Loadtest for FIWARE Components](https://github.com/FIWARE/load-tests) provides laodtest for FIWARE.
+After deploying, you can get the services endpoint by running:
 
-## Clean up
+`docker compose --project-name orion ps`
+`docker compose --project-name cygnus ps`
+
+As an example, you can create an `entity` by using curl:
+
+```js
+curl --request POST \
+  --url http://orion-alb-<aws_account>.<aws_region>.elb.amazonaws.com:1026/v2/entities \
+  --header 'Content-Type: application/json' \
+  --header 'fiware-service: demo' \
+  --header 'fiware-servicepath: /' \
+  --data '{
+ "id": "living",
+ "type": "Room",
+ "temperature": {"value": 23, "type": "Float"}
+}'
+```
+
+## 5. Testing
+
+[Loadtest for FIWARE Components](https://github.com/FIWARE/load-tests) provides load test for FIWARE.
+
+## 6. Clean up
 
 If you need to clean up the resources, please follow steps below.
 
-### Delete the FIWARE services
+### 6.1 Delete the FIWARE services
 
 Orion: `docker compose -p orion down`
 
 Cygnus: `docker compose -p cygnus down`
 
-### Deprovision Infrastructure
+### 6.2 Deprovision Infrastructure
 
 **[WARN] All data will be deleted by this step.**
 
 `npm run cdk destroy -- --all --profile <AWS_PROFILE>`
 
-## Additional Topics
+## 7. Additional Topics
 
-### MongoDB as context database for Orion
+### 7.1 MongoDB as context database for Orion
 
 If you have a MongoDB cluster, like [Atlas](https://www.mongodb.com/cloud/atlas), you can edit the [docker-compose](./docker/orion/docker-compose.yml.sample) file for orion with these options:
 
@@ -129,9 +157,9 @@ command: ...
 
 Replace parameter values for Orion below with ones MongoDB Atlas provided.
 
-### Useful docker compose cli command
+### 7.2 Useful docker compose cli command
 
-#### logs
+#### Logs
 
 To get the application logs.
 
@@ -139,7 +167,7 @@ To get the application logs.
 docker compose --project-name <project name> logs
 ```
 
-#### ps
+#### Service status
 
 To get service information deployed on ECS.
 
@@ -153,7 +181,7 @@ task/orion/d869b3ca63b241c0801c46488d3791ba   orion               Running       
 
 ```
 
-#### convert
+#### CloudFormation
 
 To transform docker-compose.yml into a CloudFormation template.
 
@@ -180,11 +208,11 @@ Resources:
 
 ```
 
-## Testing
+## 8. Testing
 
 Follow the demo from the published blog: [How to build smart cities with FIWARE Orion Context Broker and Cygnus on AWS](https://aws.amazon.com/blogs/publicsector/how-to-build-smart-cities-with-fiware-orion-context-broker-and-cygnus-on-aws/)
 
-## Known Issues
+## 9. Known Issues
 
 ### DocumentDB vs MongoDB
 
