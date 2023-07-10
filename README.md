@@ -6,9 +6,9 @@ This guide will help you to deploy Fiware's Orion and Cygnus components into a s
 
 1. An [AWS CDK](https://aws.amazon.com/cdk/) project in charge of provisioning the basic infrastructure with a VPC Network, Security Groups and two managed Databases, one Amazon Aurora Serverless (PostgreSql) and one Amazon DocumentDB. These are represented in the following stacks:
 
-- Network Stack
-- DocumentDB Stack
-- Aurora Stack
+    - Network Stack
+    - DocumentDB Stack
+    - Aurora Stack
 
 2. A docker-compose generator to provisioning AWS ECS Fargate instances, ALBs with Firewall WAF rules. This is a nodeJS script that runs after the CDK and it will automatically generate two docker-compose one for each service.
 
@@ -103,6 +103,21 @@ After deploying, you can get the services endpoint by running:
 
 `docker compose --project-name orion ps`
 `docker compose --project-name cygnus ps`
+
+As an example, you can create an `entity` by using curl:
+
+```js
+curl --request POST \
+  --url http://orion-alb-<aws_account>.<aws_region>.elb.amazonaws.com:1026/v2/entities \
+  --header 'Content-Type: application/json' \
+  --header 'fiware-service: demo' \
+  --header 'fiware-servicepath: /' \
+  --data '{
+ "id": "living",
+ "type": "Room",
+ "temperature": {"value": 23, "type": "Float"}
+}'
+```
 
 ## 5. Testing
 
