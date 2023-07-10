@@ -1,16 +1,22 @@
-import * as cdk from "@aws-cdk/core";
-import * as ddb from "@aws-cdk/aws-docdb";
-import * as ec2 from "@aws-cdk/aws-ec2";
-import { Secret } from "@aws-cdk/aws-secretsmanager";
-import { SecretValue } from "@aws-cdk/core";
+import {
+  CfnOutput,
+  RemovalPolicy,
+  SecretValue,
+  Stack,
+  StackProps,
+  aws_docdb,
+  aws_ec2,
+} from "aws-cdk-lib";
+import { Secret } from "aws-cdk-lib/aws-secretsmanager";
+import { Construct } from "constructs";
 
-export interface DocumentdbStackProps extends cdk.StackProps {
-  ddbVpc: ec2.Vpc;
-  ddbSg: ec2.SecurityGroup;
+export interface DocumentdbStackProps extends StackProps {
+  ddbVpc: aws_ec2.Vpc;
+  ddbSg: aws_ec2.SecurityGroup;
 }
 
-export class DocumentdbStack extends cdk.Stack {
-  constructor(scope: cdk.Construct, id: string, props: DocumentdbStackProps) {
+export class DocumentdbStack extends Stack {
+  constructor(scope: Construct, id: string, props: DocumentdbStackProps) {
     super(scope, id, props);
     const ddbPassSecret = new Secret(this, "DocumentDB Password", {
       secretName: "ddbPassword",
@@ -20,35 +26,44 @@ export class DocumentdbStack extends cdk.Stack {
       },
     });
 
-    const parameterGroup = new ddb.ClusterParameterGroup(this, "DDB_Parameter", {
-      dbClusterParameterGroupName: "disabled-tls-parameter2",
-      parameters: {
-        tls: "disabled",
-      },
-      family: "docdb4.0",
-    });
+    const parameterGroup = new aws_docdb.ClusterParameterGroup(
+      this,
+      "DDB_Parameter",
+      {
+        dbClusterParameterGroupName: "disabled-tls-parameter2",
+        parameters: {
+          tls: "disabled",
+        },
+        family: "docdb4.0",
+      }
+    );
 
-    const ddbCluster = new ddb.DatabaseCluster(this, "DDB", {
+    const ddbCluster = new aws_docdb.DatabaseCluster(this, "DDB", {
       masterUser: {
         username: "awsdemo",
         password: SecretValue.secretsManager(ddbPassSecret.secretArn),
       },
       vpc: props.ddbVpc,
-      vpcSubnets: props.ddbVpc.selectSubnets({ subnetGroupName: "orion-private-subnet" }),
-      instanceType: ec2.InstanceType.of(ec2.InstanceClass.R5, ec2.InstanceSize.XLARGE2),
+      vpcSubnets: props.ddbVpc.selectSubnets({
+        subnetGroupName: "orion-private-subnet",
+      }),
+      instanceType: aws_ec2.InstanceType.of(
+        aws_ec2.InstanceClass.R5,
+        aws_ec2.InstanceSize.XLARGE2
+      ),
       instances: 2,
       engineVersion: "4.0",
       parameterGroup: parameterGroup,
       securityGroup: props.ddbSg,
     });
 
-    ddbCluster.applyRemovalPolicy(cdk.RemovalPolicy.DESTROY);
+    ddbCluster.applyRemovalPolicy(RemovalPolicy.DESTROY);
 
-    new cdk.CfnOutput(this, "Docdb-secretArn", {
+    new CfnOutput(this, "Docdb-secretArn", {
       value: `${ddbPassSecret.secretArn}`,
     });
 
-    new cdk.CfnOutput(this, "Docdb-endpoint", {
+    new CfnOutput(this, "Docdb-endpoint", {
       value: `${ddbCluster.clusterEndpoint.hostname}`,
     });
   }

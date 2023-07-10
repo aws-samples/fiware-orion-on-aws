@@ -1,15 +1,20 @@
-import * as cdk from "@aws-cdk/core";
-import * as ec2 from "@aws-cdk/aws-ec2";
-import * as rds from "@aws-cdk/aws-rds";
-import { Secret } from "@aws-cdk/aws-secretsmanager";
-import { SecretValue } from "@aws-cdk/core";
+import {
+  CfnOutput,
+  SecretValue,
+  Stack,
+  StackProps,
+  aws_ec2,
+  aws_rds,
+} from "aws-cdk-lib";
+import { Secret } from "aws-cdk-lib/aws-secretsmanager";
+import { Construct } from "constructs";
 
-export interface AuroraStackProps extends cdk.StackProps {
-  auroraVpc: ec2.Vpc;
-  auroraSg: ec2.SecurityGroup;
+export interface AuroraStackProps extends StackProps {
+  auroraVpc: aws_ec2.Vpc;
+  auroraSg: aws_ec2.SecurityGroup;
 }
-export class AuroraStack extends cdk.Stack {
-  constructor(scope: cdk.Construct, id: string, props: AuroraStackProps) {
+export class AuroraStack extends Stack {
+  constructor(scope: Construct, id: string, props: AuroraStackProps) {
     super(scope, id, props);
 
     const auroraPassSecret = new Secret(this, "Aurora Password", {
@@ -20,8 +25,8 @@ export class AuroraStack extends cdk.Stack {
       },
     });
 
-    const cluster = new rds.ServerlessCluster(this, "Aurora for Cygnus", {
-      engine: rds.DatabaseClusterEngine.AURORA_POSTGRESQL,
+    const cluster = new aws_rds.ServerlessCluster(this, "Aurora for Cygnus", {
+      engine: aws_rds.DatabaseClusterEngine.AURORA_POSTGRESQL,
       credentials: {
         username: "postgres",
         password: SecretValue.secretsManager(auroraPassSecret.secretArn),
@@ -32,14 +37,18 @@ export class AuroraStack extends cdk.Stack {
       }),
       securityGroups: [props.auroraSg],
       enableDataApi: true,
-      parameterGroup: rds.ParameterGroup.fromParameterGroupName(this, "CygnusdbParameterGroup", "default.aurora-postgresql10"),
+      parameterGroup: aws_rds.ParameterGroup.fromParameterGroupName(
+        this,
+        "CygnusdbParameterGroup",
+        "default.aurora-postgresql10"
+      ),
     });
 
-    new cdk.CfnOutput(this, "Aurora-Endpoint", {
+    new CfnOutput(this, "Aurora-Endpoint", {
       value: `${cluster.clusterEndpoint.hostname}`,
     });
 
-    new cdk.CfnOutput(this, "Aurora-SecretArn", {
+    new CfnOutput(this, "Aurora-SecretArn", {
       value: `${auroraPassSecret.secretArn}`,
     });
   }

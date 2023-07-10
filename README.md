@@ -73,14 +73,13 @@ After the deployment is completed, you can see these services running in you AWS
 #### 4.1 Prerequisites
 
 1. Install [docker](https://docs.docker.com/cloud/ecs-integration/).
-2. Create docker context for FIWARE environment. if you already have a context for orion and cygnus, you can just use it.
+2. Create or select a docker context for the FIWARE orion environment.
 
 ```bash
 docker context create ecs <context-name>
 ? Create a Docker context using: [Use arrows to move, type to filter]
   > An existing AWS profile  <- You can use the profile you created here.
 docker context use <context-name>
-
 ```
 
 #### 4.2 Deploy FIWARE Orion
@@ -93,7 +92,7 @@ docker context use <context-name>
 
 ## Testing
 
-[Loadtest for FIWARE Components](https://github.com/FIWARE/load-tests) provides laodtest for FIWARE.
+[Loadtest for FIWARE Components](https://github.com/FIWARE/load-tests) provides load test for FIWARE.
 
 ## Clean up
 

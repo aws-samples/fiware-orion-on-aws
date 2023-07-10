@@ -1,5 +1,7 @@
 #!/usr/bin/env node
-import * as cdk from "@aws-cdk/core";
+import "source-map-support/register";
+import * as cdk from "aws-cdk-lib";
+
 import { DocumentdbStack } from "../lib/documentdb-stack";
 import { NetworkStack } from "../lib/network-stack";
 import { AuroraStack } from "../lib/aurora-stack";
@@ -11,7 +13,12 @@ const env = {
   region: process.env.CDK_DEFAULT_REGION,
 };
 
-const nw = new NetworkStack(app, "Network", { env });
+const nw = new NetworkStack(app, "Network", {
+  cidr: "10.0.0.0/16",
+  cidrMask: 24,
+  maxAzs: 4,
+  env,
+});
 
 new DocumentdbStack(app, "DocumentdbStack", {
   ddbVpc: nw.vpc,
