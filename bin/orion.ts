@@ -10,7 +10,7 @@ const app = new cdk.App();
 
 const env = {
   account: process.env.CDK_DEFAULT_ACCOUNT,
-  region: process.env.CDK_DEFAULT_REGION,
+  region: process.env.AWS_REGION || process.env.CDK_DEFAULT_REGION,
 };
 
 const nw = new NetworkStack(app, "Network", {

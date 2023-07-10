@@ -21,7 +21,7 @@ export class NetworkStack extends Stack {
   public readonly auroraSg: aws_ec2.SecurityGroup;
 
   constructor(scope: Construct, id: string, props: NetworkProps) {
-    super(scope, id);
+    super(scope, id, props);
     const cwLogs = new LogGroup(this, "orion-vpc-logs", {
       logGroupName: "/aws/vpc/flowlogs",
       removalPolicy: RemovalPolicy.DESTROY,
