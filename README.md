@@ -52,6 +52,12 @@ You can edit the `waf.json` file anytime, but you will have to run the `docker c
 
 ### 3. Deployer script
 
+#### 3.1 Prerequisites
+
+Instal node v18.16.1 or greater.
+
+#### 3.2 Provisioning
+
 The basic infrastructure and the docker-compose generator are executed by this bash script:
 
 `$./deployer.sh <AWS_PROFILE>`
