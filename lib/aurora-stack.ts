@@ -40,7 +40,7 @@ export class AuroraStack extends Stack {
       parameterGroup: aws_rds.ParameterGroup.fromParameterGroupName(
         this,
         "CygnusdbParameterGroup",
-        "default.aurora-postgresql10"
+        "default.aurora-postgresql13"
       ),
     });
 
