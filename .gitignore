@@ -4,13 +4,12 @@ node_modules
 *.js
 !jest.config.js
 *.d.ts
+.env
 
 # CDK asset staging directory
 .cdk.staging
 cdk.out
 cdk.context.json
 cdk-outputs.json
-waf.json
-# Auto-generated docker compose files
-docker/**/docker-compose.yml
 
+!types.d.ts
