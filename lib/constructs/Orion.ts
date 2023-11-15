@@ -52,8 +52,8 @@ export class OrionService extends Construct {
     let image;
     let secrets;
     let environment;
-
-    const mongoUri = `mongodb://${props.docdb.ddbUser}:\${PWD}@${docdbHostName}:${docdbHostPort}/?replicaSet=rs0&readPreference=secondaryPreferred&retryWrites=false`;
+    let entryPoint = undefined;
+    let command = undefined;
 
     if (props.orionLD) {
       image = "fiware/orion-ld";
@@ -63,18 +63,19 @@ export class OrionService extends Construct {
       environment = {
         ORIONLD_MONGO_USER: props.docdb.ddbUser,
         ORIONLD_MONGOCONLY: "TRUE",
-        ORIONLD_MONGO_URI: mongoUri,
+        ORIONLD_MONGO_URI: `mongodb://${props.docdb.ddbUser}:\${PWD}@${docdbHostName}:${docdbHostPort}/?replicaSet=rs0&readPreference=secondaryPreferred&retryWrites=false`,
         ORIONLD_SUBCACHE_IVAL: "3",
         ORIONLD_MONGO_DB: "orionld",
       };
     } else {
       image = "fiware/orion";
+      entryPoint = ["/bin/sh", "-c"];
+      command = ["/usr/bin/contextBroker -fg -multiservice -ngsiv1Autocast -disableFileLog -rplSet rs0 -dbDisableRetryWrites"];
       secrets = {
         ORION_MONGO_PASSWORD: Secret.fromSecretsManager(props.docdb.ddbPassSecret),
       };
       environment = {
         ORION_MONGO_USER: props.docdb.ddbUser,
-        ORION_MONGO_URI: mongoUri,
         ORION_SUBCACHE_IVAL: "3",
         ORION_MONGO_HOST: `${docdbHostName}:${docdbHostPort}`,
       };
@@ -103,6 +104,8 @@ export class OrionService extends Construct {
         containerName: "fiware-orion",
         logDriver: props.logging,
         containerPort: 1026,
+        entryPoint,
+        command,
       },
     });
 
